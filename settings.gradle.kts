@@ -21,3 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "PlateScanMVP"
 include(":app")
+include(":sdk")
+project(":sdk").projectDir = File(rootDir, "opencv-4.12.0-android-sdk/OpenCV-android-sdk/sdk/")

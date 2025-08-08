@@ -1,12 +1,12 @@
 package com.himaaya.platescan
 
+import android.graphics.PointF
 import android.graphics.RectF
-import kotlin.math.max
-import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 class PlateTracker {
 
-    // ✅ NUEVA ESTRUCTURA: El objeto rastreado ahora tiene un ID único y un contador de "vidas".
     private data class TrackedObject(
         val id: Int,
         var detection: Detection,
@@ -15,65 +15,54 @@ class PlateTracker {
 
     private val trackedObjects = mutableListOf<TrackedObject>()
     private var nextId = 0
-    private val MAX_FRAMES_WITHOUT_MATCH = 4 // Tolerancia: el HUD sobrevive 4 frames sin ser detectado.
+    private val MAX_FRAMES_WITHOUT_MATCH = 5 // Tolerancia antes de eliminar un HUD
+    private val MAX_DISTANCE_THRESHOLD = 150f // Distancia máxima (en píxeles) para considerar una coincidencia
 
-    // ✅ LÓGICA DE TRACKING COMPLETAMENTE REESCRITA
     fun update(freshDetections: List<Detection>): List<Detection> {
-        val IOU_THRESHOLD = 0.5f
+        // 1. Crear una lista de no coincidentes para las detecciones frescas
+        val unmatchedFreshDetections = freshDetections.toMutableList()
+        val matchedTrackedIndices = mutableSetOf<Int>()
 
-        // 1. Marcar todos los objetos existentes para ver si encontramos una coincidencia en este frame
-        trackedObjects.forEach { it.framesWithoutMatch++ }
-
-        val matchedFreshIndices = mutableSetOf<Int>()
-
-        // 2. Intentar hacer coincidir las detecciones nuevas con los objetos que ya seguimos
-        for (trackedObj in trackedObjects) {
+        // 2. Intentar hacer coincidir cada objeto que ya seguimos con la detección fresca más cercana
+        trackedObjects.forEachIndexed { i, trackedObj ->
             var bestMatchIndex = -1
-            var maxIou = 0f
+            var minDistance = Float.MAX_VALUE
 
-            for (i in freshDetections.indices) {
-                if (i in matchedFreshIndices) continue
-
-                val freshDet = freshDetections[i]
-                val iou = calculateIoU(trackedObj.detection.toRectF(), freshDet.toRectF())
-
-                if (iou > IOU_THRESHOLD && iou > maxIou) {
-                    maxIou = iou
-                    bestMatchIndex = i
+            unmatchedFreshDetections.forEachIndexed { j, freshDet ->
+                val distance = calculateCenterDistance(trackedObj.detection.getCenter(), freshDet.getCenter())
+                if (distance < MAX_DISTANCE_THRESHOLD && distance < minDistance) {
+                    minDistance = distance
+                    bestMatchIndex = j
                 }
             }
 
             if (bestMatchIndex != -1) {
-                // Coincidencia encontrada: actualizamos la posición y reseteamos el contador de "vidas"
-                trackedObj.detection = freshDetections[bestMatchIndex]
+                // Coincidencia encontrada: actualizamos el objeto y lo marcamos como coincidente
+                val matchedDet = unmatchedFreshDetections.removeAt(bestMatchIndex)
+                trackedObj.detection = matchedDet
                 trackedObj.framesWithoutMatch = 0
-                matchedFreshIndices.add(bestMatchIndex)
+                matchedTrackedIndices.add(i)
+            } else {
+                // No se encontró coincidencia para este objeto
+                trackedObj.framesWithoutMatch++
             }
         }
 
-        // 3. Añadir las detecciones nuevas que no coincidieron como nuevos objetos a rastrear
-        for (i in freshDetections.indices) {
-            if (i !in matchedFreshIndices) {
-                trackedObjects.add(TrackedObject(nextId++, freshDetections[i]))
-            }
+        // 3. Añadir las detecciones frescas que no coincidieron como nuevos objetos a rastrear
+        unmatchedFreshDetections.forEach { newDet ->
+            trackedObjects.add(TrackedObject(nextId++, newDet))
         }
 
-        // 4. Eliminar objetos que han superado la tolerancia de "vidas" (no se han visto en N frames)
+        // 4. Eliminar objetos que se han perdido por demasiados frames
         trackedObjects.removeAll { it.framesWithoutMatch > MAX_FRAMES_WITHOUT_MATCH }
 
-        // 5. Devolver la lista actual de detecciones activas para ser dibujadas
+        // 5. Devolver la lista actual de detecciones activas
         return trackedObjects.map { it.detection }
     }
 
-    private fun calculateIoU(box1: RectF, box2: RectF): Float {
-        val xA = max(box1.left, box2.left)
-        val yA = max(box1.top, box2.top)
-        val xB = min(box1.right, box2.right)
-        val yB = min(box1.bottom, box2.bottom)
-        val intersectionArea = max(0f, xB - xA) * max(0f, yB - yA)
-        val box1Area = (box1.right - box1.left) * (box1.bottom - box1.top)
-        val box2Area = (box2.right - box2.left) * (box2.bottom - box2.top)
-        val unionArea = box1Area + box2Area - intersectionArea
-        return if (unionArea > 0) intersectionArea / unionArea else 0f
+    // Calcula la distancia euclidiana entre los centros de dos puntos
+    private fun calculateCenterDistance(center1: PointF, center2: PointF): Float {
+        return sqrt((center1.x - center2.x).pow(2) + (center1.y - center2.y).pow(2))
     }
 }
+

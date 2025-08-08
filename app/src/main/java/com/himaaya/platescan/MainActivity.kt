@@ -3,6 +3,7 @@ package com.himaaya.platescan
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.graphics.RectF
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -20,6 +21,8 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
+import kotlin.math.max
+import kotlin.math.min
 
 class MainActivity : ComponentActivity() {
 
@@ -27,7 +30,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var textRecognizer: TextRecognizer
     private val offendersMap = mutableMapOf<String, String>()
 
-    // ✅ CREAMOS UNA INSTANCIA DE NUESTRO NUEVO TRACKER
     private val plateTracker = PlateTracker()
 
     private val requestPermissionLauncher =
@@ -90,12 +92,8 @@ class MainActivity : ComponentActivity() {
             textRecognizer.process(image)
                 .addOnSuccessListener { visionText ->
                     val rawDetections = processTextRecognitionResult(visionText)
-
-                    // ✅ LA LÓGICA COMPLEJA AHORA ESTÁ EN UNA SOLA LLAMADA
                     val trackedDetections = plateTracker.update(rawDetections)
-
                     val transformedDetections = transformCoordinates(trackedDetections, imageProxy, previewView)
-
                     runOnUiThread { overlay.setDetections(transformedDetections) }
                 }
                 .addOnFailureListener { e ->

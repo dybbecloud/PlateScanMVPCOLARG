@@ -1,0 +1,5 @@
+[
+  { "plate": "NVZ087", "reason": "Debe facturas", "severity": "high" },
+  { "plate": "XYZ789", "reason": "Infracciones impagas", "severity": "medium" },
+  { "plate": "HNZ001", "reason": "Alerta judicial", "severity": "high" }
+]
